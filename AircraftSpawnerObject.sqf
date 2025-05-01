@@ -1,73 +1,119 @@
-// references: 
-// https://community.bistudio.com/wiki/Object;
-// https://community.bistudio.com/wiki/createVehicle
-// https://community.bistudio.com/wiki/setVehiclePosition
-// https://community.bistudio.com/wiki/Arma_3:_Simple_Objects
-// https://community.bistudio.com/wiki/createSimpleObject
-// https://community.bistudio.com/wiki/BIS_fnc_spawnObjects
-// https://github.com/MisterHLunaticwraith/MRHMilsimTools/tree/master/Addons/MRHVehicleSpawner - to reference for deleting objects within the spawner location;
-
-// ex. introduction to board:
-// board1 addAction ["Spawn Vehicle","scripts\veh.sqf"]
-// _veh = "vehicle_classname" createVehicle getMarkerPos "marker_name";  // "marker_name" replace with named location variable (i.e. "helipad_01" - use an invisible helipad marker)
-
-// ex. generic SIMPLE spawn of a vehicle (CAUTION: SIMPLE OBJECT!!):
-// _pos = player getRelPos [10, 0];
-// createSimpleObject ["B_APC_Tracked_01_CRV_F", AGLToASL _pos];
-
-// may be worth checking "Land_HelipadEmpty_F";
-
-// ex. generic spawn of a vehicle:
-// To avoid vehicle randomisation in Arma 3, set the BIS_enableRandomization variable immediately after creating the vehicle:
-	// private _vehicle;
-	// isNil { // run unscheduled
-	// 	_vehicle = "C_Offroad_01_F" createVehicle getPosATL player;
-	// 	_vehicle setVariable ["BIS_enableRandomization", false];
-	// };
-// // the _vehicle variable is available after that
-
-
-private _helipadSpawnMarker = "Land_HelipadEmpty_F" createVehicle position player; 
-private _helipadPos = getPosATL _helipadSpawnMarker;
-
-// Now, spawn the vehicle at the position of the helipad
-private _vehicle = "C_Offroad_01_F" createVehicle _helipadPos;\
-
-// ----------
-
-private _helipadSpawnMarker = "Land_HelipadEmpty_F" createVehicle position player;  
-private _helipadPos = getPosATL _helipadSpawnMarker; 
- 
-hint format ["Helipad position: %1", _helipadPos];
-
-// --- try this object instead:
-"Land_HelipadEmpty_F"
-
-// --- this correctly spawns a truck on the "helipad01" point that was pre-created in the mission-file:
-"C_Offroad_01_F" createVehicle getPosATL helipad01;
-"B_Heli_Transport_01_F" createVehicle getPosATL helipad01;
-
-//these in the "init" block of the spawnerObject is causing an error (because it is getting code in [1] instead of the expected "string" of an abstraction "path"):
-// testing adding scrollwheel item (object VariableName "computerSpawner"):
-// computerSpawner addAction ["Spawn GhostHawk", "B_Heli_Transport_01_F" createVehicle getPosATL helipad01]
-
-// also valid:
-// computerSpawner addAction ["Spawn GhostHawk", ("B_Heli_Transport_01_F" createVehicle getPosATL helipad01)];
-
-
-
-
-
-
-// -- from ClaudeAI
-// Create the info stand terminal
+// Create the info stand terminal dynamically - otherwise place manually in Eden Editor
 _terminal = "Land_InfoStand_V2_F" createVehicle [position player select 0, (position player select 1) + 2, 0];
 
-// Add action menu items when in proximity and looking at terminal
-_actionID1 = _terminal addAction ["<t color='#4CAF50'>Menu_item_1</t>", {
-    hint "Menu item 1 selected";
-}, nil, 6, true, true, "", "(_this distance _target < 3) && {cursorObject == _target}"]; 
+// scrollwheel actions for the terminal/spawner's "init" field:
+this addAction ["<t color='#4CAF50'>Spawn Helicopter</t>", { 
+    _terminal = _this select 0; 
+ 
+    _allHelipads = nearestObjects [_terminal, ["Land_HelipadEmpty_F"], 100]; 
+ 
+    if (count _allHelipads == 0) then { 
+        hint "No helipad found within 100m!"; 
+    } else { 
+        _helipad = _allHelipads select 0; 
+ 
+        _pos = getPosATL _helipad; 
+        _exactPos = [_pos select 0, _pos select 1, _pos select 2];
+        _dir = getDir _helipad;
+ 
+        _nearbyVehicles = nearestObjects [_pos, ["Air", "LandVehicle", "Ship"], 10]; 
+         
+        if (count _nearbyVehicles > 0) then {
+            _canClear = false;
+            _emptyCraft = objNull;
+            
+            // Check if there's an empty aircraft
+            {
+                if (_x isKindOf "Air" && {count crew _x == 0}) then {
+                    _canClear = true;
+                    _emptyCraft = _x;
+                };
+            } forEach _nearbyVehicles;
+            
+            if (_canClear && !isNull _emptyCraft) then {
+                // Delete the empty aircraft
+                deleteVehicle _emptyCraft;
+                
+                // Slight delay for engine to process deletion
+                [_exactPos, _dir] spawn {
+                    params ["_spawnPos", "_spawnDir"];
+                    sleep 0.1;
+                    
+                    // Force exact position and prevent collision detection during spawn
+                    _heli = createVehicle ["B_Heli_Transport_01_F", [0,0,0], [], 0, "CAN_COLLIDE"];
+                    _heli setPosATL _spawnPos;
+                    _heli setDir _spawnDir;
+                };
+                
+                hint "Removed empty aircraft and spawned new helicopter at helipad.";
+            } else {
+                hint "Cannot spawn helicopter! Landing zone is not clear.";
+            };
+        } else { 
+            // No nearby vehicles, direct spawn
+            _heli = createVehicle ["B_Heli_Transport_01_F", _exactPos, [], 0, "CAN_COLLIDE"];
+            _heli setDir _dir;
+            
+            hint "Helicopter spawned at helipad."; 
+        }; 
+    };
+}, nil, 6, true, true, "", "(_this distance _target < 3) && {cursorObject == _target}"];
 
+//without comments (so you can save the object in-game!)
+this addAction ["<t color='#4CAF50'>Spawn Helicopter</t>", {  
+    _terminal = _this select 0;  
+  
+    _allHelipads = nearestObjects [_terminal, ["Land_HelipadEmpty_F"], 100];  
+  
+    if (count _allHelipads == 0) then {  
+        hint "No helipad found within 100m!";  
+    } else {  
+        _helipad = _allHelipads select 0;  
+  
+        _pos = getPosATL _helipad;  
+        _exactPos = [_pos select 0, _pos select 1, _pos select 2]; 
+        _dir = getDir _helipad; 
+  
+        _nearbyVehicles = nearestObjects [_pos, ["Air", "LandVehicle", "Ship"], 10];  
+          
+        if (count _nearbyVehicles > 0) then { 
+            _canClear = false; 
+            _emptyCraft = objNull; 
+             
+            { 
+                if (_x isKindOf "Air" && {count crew _x == 0}) then { 
+                    _canClear = true; 
+                    _emptyCraft = _x; 
+                }; 
+            } forEach _nearbyVehicles; 
+             
+            if (_canClear && !isNull _emptyCraft) then { 
+                deleteVehicle _emptyCraft; 
+                 
+                [_exactPos, _dir] spawn { 
+                    params ["_spawnPos", "_spawnDir"]; 
+                    sleep 0.1; 
+                     
+                    _heli = createVehicle ["B_Heli_Transport_01_F", [0,0,0], [], 0, "CAN_COLLIDE"]; 
+                    _heli setPosATL _spawnPos; 
+                    _heli setDir _spawnDir; 
+                }; 
+                 
+                hint "Removed empty aircraft and spawned new helicopter at helipad."; 
+            } else { 
+                hint "Cannot spawn helicopter! Landing zone is not clear."; 
+            }; 
+        } else {  
+            _heli = createVehicle ["B_Heli_Transport_01_F", _exactPos, [], 0, "CAN_COLLIDE"]; 
+            _heli setDir _dir; 
+             
+            hint "Helicopter spawned at helipad.";  
+        };  
+    }; 
+}, nil, 6, true, true, "", "(_this distance _target < 3) && {cursorObject == _target}"];
+
+
+// other action menus to use for colors later
 _actionID2 = _terminal addAction ["<t color='#2196F3'>Menu_item_2</t>", {
     hint "Menu item 2 selected";
 }, nil, 5, true, true, "", "(_this distance _target < 3) && {cursorObject == _target}"];
